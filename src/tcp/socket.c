@@ -31,10 +31,15 @@ int _num_threads = 10;
 int _listenfd = 0;
 
 
-// prints the error message and quits
-void error(char *msg) {
+/**
+ * prints the error message and quits
+ */
+void error(char *msg, int should_exit) {
   perror(msg);
-  exit(1);
+  fflush(stdout);
+  if (exit) {
+    exit(1);
+  }
 }
 
 void usage(void) {
@@ -48,7 +53,9 @@ void usage(void) {
       "\n");
 }
 
-// parses the command line arguments
+/**
+ * parses the command line arguments
+ */
 void parse_arguments(int argc, char *argv[]) {
   opterr = 0;
   int c;
@@ -86,32 +93,93 @@ void parse_arguments(int argc, char *argv[]) {
   }
 }
 
+/**
+ * get the string representation of a request
+ */
+char *get_request(int client) {
+  static char buffer[BUFFER_SIZE+1];
+  char *request = "this is a test";
+  int nread;
+  while (1) {
+    nread = recv(client, buffer, BUFFER_SIZE, 0);
+    if (nread < 0) {
+      if (errno == EINTR) {
+        // the socket call was interrupted -- try again
+        continue;
+      }
+      else {
+        // an error occurred, so break out
+        return "";
+      }
+    } else if (nread == 0) {
+      // the socket is closed
+      return "";
+    }
+    // TODO: parse the buffer
+    request = buffer;
+    break;
+    // find the end of a request and leave the rest
+  }
+  printf("%s\n", request);
+  return request;
+}
+
+/**
+ * creates an error response
+ */
+char *create_error_response(int code, char *message) {
+  return "HTTP/1.1 400 Not Found\r\n\r\n";
+}
+
+/**
+ * attempts to handle the request.
+ * sets the value of response
+ * returns TRUE(1) if handled FALSE(0) if not
+ */
+int handle_request(char *request, char *response) {
+  return FALSE;
+}
+
+/**
+ * The main logic for handling requests
+ */
+void handle(int client) {
+  char *response;
+
+  // read a request
+  char *request = get_request(client);
+
+  // attempt to handle the request
+  if (!handle_request(request, response)) {
+    response = create_error_response(404, "Not found");
+  }
+
+  // write the response
+  if (!write(client, response, strlen(response))) {
+    error("error writing to socket", FALSE);
+  }
+
+  printf("fd: %d\n", client);
+  fflush(stdout);
+
+  close(client);
+}
+
+/**
+ * An accept thread. This will continue to accept connections until the server 
+ * shuts down.
+ */
 void *serve(void *vptr) {
-  int connectionfd;
-  time_t ticks;
-  char send_buff[BUFFER_SIZE];
+  int connectionfd, index;
   struct sockaddr_in client_addr;
   socklen_t client_len = sizeof(client_addr);
 
-  // initialize the buffer
-  bzero(send_buff, sizeof(send_buff)); 
-
   while ((connectionfd = accept(_listenfd, (struct sockaddr*)&client_addr, &client_len)) > 0) {
     if (connectionfd < 0) {
-      error("error on accept");
+      error("error on accept", FALSE);
+      break;
     }
-    ticks = time(NULL);
-    snprintf(send_buff, sizeof(send_buff), "%.24s\r\n", ctime(&ticks));
-    if (!write(connectionfd, send_buff, strlen(send_buff))) {
-      error("error writing to socket");
-    }
-
-    printf("fd: %d", connectionfd);
-    printf("%.24s\n", ctime(&ticks));
-    fflush(stdout);
-
-    close(connectionfd);
-    sleep(1000);
+    handle(connectionfd);
   }
   return NULL;
 }
@@ -135,7 +203,7 @@ int main(int argc, char *argv[]) {
 
   // bind to the socket
   if (bind(_listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr))) {
-    error("Failed to bind to socket");
+    error("Failed to bind to socket", TRUE);
   }
 
   // open shop
@@ -155,7 +223,7 @@ int main(int argc, char *argv[]) {
   // join the threads
   for (thread_i = 0; thread_i < _num_threads; ++thread_i) {
     if (pthread_join(threads[thread_i], NULL)) {
-      error("failure to join thread");
+      error("failure to join thread", TRUE);
     }
   }
 
