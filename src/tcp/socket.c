@@ -81,7 +81,7 @@ void parse_arguments(int argc, char *argv[]) {
         }
       default:
         usage();
-        abort();
+        exit(1);
     }
   }
 }
