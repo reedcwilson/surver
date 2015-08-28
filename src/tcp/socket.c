@@ -15,9 +15,10 @@
 #include <pthread.h>
 #include <semaphore.h>
 
-#define BUFFER_SIZE         8192      // 2^13
-#define TRUE                1         // a macro for true
-#define FALSE               0         // a macro for false
+#ifndef MAIN_HEADER
+#define MAIN_HEADER
+#include "main.h"
+#endif
 
 // the port number.
 int _port_num = 5000;
@@ -143,6 +144,7 @@ int main(int argc, char *argv[]) {
   printf("listening on port %d...\n", _port_num);
   fflush(stdout);
 
+  // the parameters to pass to threads
   char *nothing = "";
 
   // start the threads
